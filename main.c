@@ -42,6 +42,7 @@
 #define REG_AS7341_CFG_1	0XAA
 #define REG_AS7341_GPIO_2	0XBE
 #define REG_AS7341_INTENAB	0XF9
+#define REG_AS7341_AZERO	0xD6	//Set auto zero iterations
 
 #define f4_left 			0x05	//Set f4 to ADC 3
 #define f4_right 			0x0D
@@ -60,8 +61,9 @@
 #define AS7341_CH4_DATA_H 0x9E ///< ADC Channel Data
 #define AS7341_CH5_DATA_L 0x9F ///< ADC Channel Data
 #define AS7341_CH5_DATA_H 0xA0 ///< ADC Channel Data
-#define AS7341_LED 0x74    ///< LED Register; Enables and sets current limit
 
+
+#define COMPANY_ID_CODE            0x0059
 //#define CH2_DATA_L			0x99	//f7
 //#define CH2_DATA_H			0x9A
 //#define CH3_DATA_L			0x9B	//f4
@@ -82,8 +84,22 @@
 	writeRegister(byte(0x07), byte(0x03)); // F7 left connected to ADC2
 	writeRegister(byte(0x0A), byte(0x03)); // F7 right connected to ADC2
 */
+static unsigned char url_data[] = { 0x17, '/', '/', 'a', 'c', 'a', 'd', 'e', 'm',
+	'y',  '.', 'n', 'o', 'r', 'd', 'i', 'c', 's',
+	'e',  'm', 'i', '.', 'c', 'o', 'm' };
 
+/*Create an LE Advertising Parameters variable */
+static struct bt_le_adv_param *adv_param =
+	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_NONE, /* No options specified */
+			32, /* Min Advertising Interval 500ms (800*0.625ms) [20ms (32*0.625)] */
+			40, /* Max Advertising Interval 500.625ms (801*0.625ms) [25ms (35*0.625)] */
+			NULL); /* Set to NULL for undirected advertising */
 
+typedef struct adv_mfg_data {
+	uint16_t company_code;	    /* Company Identifier Code. */
+	uint16_t F4_reading;      /* Number of times Button 1 is pressed*/
+	uint16_t F7_reading;
+} adv_mfg_data_type;
 /*
  * Set Advertisement data. Based on the Eddystone specification:
  * https://github.com/google/eddystone/blob/master/protocol-specification.md
@@ -103,11 +119,19 @@ static const struct bt_data ad[] = {
 };
 
 static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
+static adv_mfg_data_type adv_mfg_data = {COMPANY_ID_CODE,0x00,0x00};
 
 /* Set Scan Response data */
-static const struct bt_data sd[] = {
+static const struct bt_data ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
 	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+	BT_DATA(BT_DATA_MANUFACTURER_DATA, (unsigned char *)&adv_mfg_data, sizeof(adv_mfg_data)),
 };
+
+static const struct bt_data sd[] = {
+	BT_DATA(BT_DATA_URI, url_data, sizeof(url_data)),
+};
+
 
 void enableAS7341(bool on)
 {
@@ -230,58 +254,10 @@ void startMeasure()
 	enableSpectralMeasure(false);
 	i2c_reg_write_byte_dt(&dev_i2c, AS7341_CFG6, 0x10);
   	//Set up ADC channel to filter
-	//if(channel==1){
-	i2c_reg_write_byte_dt(&dev_i2c, f4_left, 0x42);
+	i2c_reg_write_byte_dt(&dev_i2c, f4_left, 0x42);	//F4 register to ADC3
 	i2c_reg_write_byte_dt(&dev_i2c, f4_right, 0x04);
-		/*
-		ret = i2c_reg_write_byte_dt(&dev_i2c,0x00, 0x30); 
-		if(ret != 0){
-			printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,0x00);
-		}
-		i2c_reg_write_byte_dt(&dev_i2c,0x01, 0x01); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x02, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x03, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x04, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x05, 0x42); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x06, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x07, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x08, 0x50); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x09, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0A, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0B, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0C, 0x20); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0D, 0x04); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0E, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0F, 0x30); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x10, 0x01); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x11, 0x50); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x12, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x13, 0x06); */
-	//}
-	//if (channel ==2){
-	i2c_reg_write_byte_dt(&dev_i2c, f7_left, 0x13);
+	i2c_reg_write_byte_dt(&dev_i2c, f7_left, 0x13);	//F6 register to ADC2
 	i2c_reg_write_byte_dt(&dev_i2c, f7_right, 0x13);
-		/*i2c_reg_write_byte_dt(&dev_i2c,0x00, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x01, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x02, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x03, 0x40); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x04, 0x02); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x05, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x06, 0x10); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x07, 0x03); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x08, 0x50); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x09, 0x10); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0A, 0x03); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0B, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0C, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0D, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0E, 0x24); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x0F, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x10, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x11, 0x50); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x12, 0x00); 
-		i2c_reg_write_byte_dt(&dev_i2c,0x13, 0x06); */
-	//};
   	enableSMUX(true);
 	config(eSpm);
   	enableSpectralMeasure(true);
@@ -409,42 +385,31 @@ int main(void)
 	setAGAIN(10); // sets gain to 512x
 	setAstep(84);
 	setAtime(84);
+
+	printk("Starting Beacon\n");
+	/* Initialize the Bluetooth Subsystem */
+	err = bt_enable(bt_ready);
+	if (err) {
+		printk("Bluetooth init failed (err %d)\n", err);
+	}
 	startMeasure();
 	for(i=0; i<10; i++){
 		
 		//read data from f4 (ch3)
 		//AF = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
 		//printf("Value from f4: %d\n", AF);
-		
 		CH0 = getChannelData(AS7341_CH0_DATA_L, AS7341_CH0_DATA_H);
 		CH1 = getChannelData(AS7341_CH1_DATA_L, AS7341_CH1_DATA_H);
 		PPIX = getChannelData(AS7341_CH2_DATA_L, AS7341_CH2_DATA_H);
 		AF = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
 		CH4 = getChannelData(AS7341_CH4_DATA_L, AS7341_CH4_DATA_H);
 		CH5 = getChannelData(AS7341_CH5_DATA_L, AS7341_CH5_DATA_H);
-		printk("Channel values: %d, %d, %d, %d, %d, %d\n", CH0, CH1, AF, PPIX, CH4, CH5);
-		//printk("F4 Reading: %d\nF7 Reading: %d\n", AF, PPIX);
-		/*startMeasure(2);
-		CH0 = getChannelData(AS7341_CH0_DATA_L, AS7341_CH0_DATA_H);
-		CH1 = getChannelData(AS7341_CH1_DATA_L, AS7341_CH1_DATA_H);
-		CH2 = getChannelData(AS7341_CH2_DATA_L, AS7341_CH2_DATA_H);
-		CH3 = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
-		CH4 = getChannelData(AS7341_CH4_DATA_L, AS7341_CH4_DATA_H);
-		CH5 = getChannelData(AS7341_CH5_DATA_L, AS7341_CH5_DATA_H);
-		printk("Channel values from 2: %d, %d, %d, %d, %d, %d\n", CH0, CH1, CH2, CH3, CH4, CH5);
-		*/
-		//startMeasure(2);
-		//read data from f7 (ch2)
-		//PPIX = getChannelData(AS7341_CH2_DATA_L, AS7341_CH2_DATA_H);
-		//printf("Value from f7: %d\n", PPIX);
+		printk("F4 Reading: %d\nF7 Reading: %d\n", AF, PPIX);
+		/*Update the advertising data dynamically */
+		adv_mfg_data.F4_reading = AF;
+		adv_mfg_data.F7_reading = PPIX;
+		bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
 	}
-	
-	printk("Starting Beacon\n");
 
-	/* Initialize the Bluetooth Subsystem */
-	err = bt_enable(bt_ready);
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-	}
 	return 0;
 }
