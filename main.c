@@ -1,10 +1,10 @@
 /* main.c - Application main entry point */
 
 /*
- * Copyright (c) 2015-2016 Intel Corporation
- *
- * SPDX-License-Identifier: Apache-2.0
- */
+* Copyright (c) 2015-2016 Intel Corporation
+*
+* SPDX-License-Identifier: Apache-2.0
+*/
 
 #include <zephyr/types.h>
 #include <stddef.h>
@@ -19,7 +19,7 @@
 //Define I2C
 #include <zephyr/drivers/i2c.h>
 
-//From L6 E1, P.026 = SDA and P.027 = SCL
+//P.026 = SDA and P.027 = SCL
 
 #define I2C0_NODE DT_NODELABEL(mysensor)
 
@@ -71,345 +71,328 @@
 #define REG_AS7341_CH0_DATA_L  0X95
 #define REG_AS7341_CH0_DATA_H  0X96
 
-  typedef enum {
-    eSpm = 0,/**<SPM>*/
-    eSyns = 1,/**<SYNS*/
-    eSynd = 3,/**<SYND>*/
-    
-  }eMode_t;
+typedef enum {
+eSpm = 0,/**<SPM>*/
+eSyns = 1,/**<SYNS*/
+eSynd = 3,/**<SYND>*/
+
+}eMode_t;
 
 /*
-	writeRegister(byte(0x05), byte(0x42)); // F4 left connected to ADC3/f2 left connected to ADC1
-    writeRegister(byte(0x0D), byte(0x04)); // F4 right connected to ADC3
-	writeRegister(byte(0x07), byte(0x03)); // F7 left connected to ADC2
-	writeRegister(byte(0x0A), byte(0x03)); // F7 right connected to ADC2
+        writeRegister(byte(0x05), byte(0x42)); // F4 left connected to ADC3/f2 left connected to ADC1
+writeRegister(byte(0x0D), byte(0x04)); // F4 right connected to ADC3
+        writeRegister(byte(0x07), byte(0x03)); // F7 left connected to ADC2
+        writeRegister(byte(0x0A), byte(0x03)); // F7 right connected to ADC2
 */
-static unsigned char url_data[] = { 0x17, '/', '/', 'a', 'c', 'a', 'd', 'e', 'm',
-	'y',  '.', 'n', 'o', 'r', 'd', 'i', 'c', 's',
-	'e',  'm', 'i', '.', 'c', 'o', 'm' };
 
 /*Create an LE Advertising Parameters variable */
 static struct bt_le_adv_param *adv_param =
-	BT_LE_ADV_PARAM(BT_LE_ADV_OPT_NONE, /* No options specified */
-			32, /* Min Advertising Interval 500ms (800*0.625ms) [20ms (32*0.625)] */
-			40, /* Max Advertising Interval 500.625ms (801*0.625ms) [25ms (35*0.625)] */
-			NULL); /* Set to NULL for undirected advertising */
+        BT_LE_ADV_PARAM(BT_LE_ADV_OPT_NONE, /* No options specified */
+                        800, /* Min Advertising Interval 500ms (800*0.625ms) [20ms (32*0.625)] */
+                        801, /* Max Advertising Interval 500.625ms (801*0.625ms) [25ms (35*0.625)] */
+                        NULL); /* Set to NULL for undirected advertising */
 
 typedef struct adv_mfg_data {
-	uint16_t company_code;	    /* Company Identifier Code. */
-	uint16_t F4_reading;      /* Number of times Button 1 is pressed*/
-	uint16_t F7_reading;
+        uint16_t company_code;	    /* Company Identifier Code. */
+        uint16_t F4_reading;      /* Recordings from sensor*/
+        uint16_t F7_reading;
 } adv_mfg_data_type;
-/*
- * Set Advertisement data. Based on the Eddystone specification:
- * https://github.com/google/eddystone/blob/master/protocol-specification.md
- * https://github.com/google/eddystone/tree/master/eddystone-url
- */
-static const struct bt_data ad[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-	BT_DATA_BYTES(BT_DATA_UUID16_ALL, 0xaa, 0xfe),
-	BT_DATA_BYTES(BT_DATA_SVC_DATA16,
-		      0xaa, 0xfe, /* Eddystone UUID */
-		      0x10, /* Eddystone-URL frame type */
-		      0x00, /* Calibrated Tx power at 0m */
-		      0x00, /* URL Scheme Prefix http://www. */
-		      'z', 'e', 'p', 'h', 'y', 'r',
-		      'p', 'r', 'o', 'j', 'e', 'c', 't',
-		      0x08) /* .org */
-};
+
+
 
 static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
-static adv_mfg_data_type adv_mfg_data = {COMPANY_ID_CODE,0x00,0x00};
+adv_mfg_data_type adv_mfg_data = { COMPANY_ID_CODE , 0x00 , 0x00};
+
+/*Set Advertisement data*/
+static const struct bt_data ad[] = {
+        BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
+        BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+};
 
 /* Set Scan Response data */
-static const struct bt_data ad[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, BT_LE_AD_NO_BREDR),
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
-	BT_DATA(BT_DATA_MANUFACTURER_DATA, (unsigned char *)&adv_mfg_data, sizeof(adv_mfg_data)),
-};
-
 static const struct bt_data sd[] = {
-	BT_DATA(BT_DATA_URI, url_data, sizeof(url_data)),
+        BT_DATA(BT_DATA_MANUFACTURER_DATA, (unsigned char *)&adv_mfg_data, sizeof(adv_mfg_data)),
 };
-
 
 void enableAS7341(bool on)
 {
-	uint8_t ret;
-	uint8_t enable[2] = {ENABLE_REG,0};
-	ret = i2c_write_read_dt(&dev_i2c,&enable[0],1,&enable[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,enable[0]);
-	}
-	if(on == true){
-		enable[1] = enable[1] | (1<<0);
-	} else {
-		enable[1] = enable[1] & (~1);
-	}
-	i2c_write_dt(&dev_i2c,enable,sizeof(enable));
+        uint8_t ret;
+        uint8_t enable[2] = {ENABLE_REG,0};
+        ret = i2c_write_read_dt(&dev_i2c,&enable[0],1,&enable[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,enable[0]);
+        }
+        if(on == true){
+                enable[1] = enable[1] | (1<<0);
+        } else {
+                enable[1] = enable[1] & (~1);
+        }
+        i2c_write_dt(&dev_i2c,enable,sizeof(enable));
 }
 void enableSpectralMeasure(bool on)
 {
-	uint8_t ret;
-	uint8_t spec[2] = {ENABLE_REG,0};
-	ret = i2c_write_read_dt(&dev_i2c,&spec[0],1,&spec[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,spec[0]);
-	}
-	if(on == true){
-		spec[1] = spec[1] | (1<<1);
-	} else {
-		spec[1] = spec[1] & (~(1<<1));
-	}
-	i2c_write_dt(&dev_i2c,spec,sizeof(spec));
+        uint8_t ret;
+        uint8_t spec[2] = {ENABLE_REG,0};
+        ret = i2c_write_read_dt(&dev_i2c,&spec[0],1,&spec[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,spec[0]);
+        }
+        if(on == true){
+                spec[1] = spec[1] | (1<<1);
+        } else {
+                spec[1] = spec[1] & (~(1<<1));
+        }
+        i2c_write_dt(&dev_i2c,spec,sizeof(spec));
 }
 
 void enableSMUX(bool on){
-	uint8_t ret;
-	uint8_t smux[2] = {ENABLE_REG,0};
-	ret = i2c_write_read_dt(&dev_i2c,&smux[0],1,&smux[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,smux[0]);
-	}
-	if(on == true){
-		smux[1] = smux[1] | (1<<4);
-	} else {
-		smux[1] = smux[1] & (~(1<<4));
-	}
-	i2c_write_dt(&dev_i2c,smux,sizeof(smux));
+        uint8_t ret;
+        uint8_t smux[2] = {ENABLE_REG,0};
+        ret = i2c_write_read_dt(&dev_i2c,&smux[0],1,&smux[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,smux[0]);
+        }
+        if(on == true){
+                smux[1] = smux[1] | (1<<4);
+        } else {
+                smux[1] = smux[1] & (~(1<<4));
+        }
+        i2c_write_dt(&dev_i2c,smux,sizeof(smux));
 }
 
 void setBank(uint8_t temp){
-	uint8_t ret;
-	uint8_t bank[2] = {REG_AS7341_CFG_0,0};
-	ret = i2c_write_read_dt(&dev_i2c,&bank[0],1,&bank[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,bank[0]);
-	}
-	if(temp == 1){
-	
-		bank[1] = bank[1] | (1<<4);
-	}
-	
-	if(temp == 0){
-	
-		bank[1] = bank[1] & (~(1<<4));
-	}
-	i2c_write_dt(&dev_i2c,bank,sizeof(bank));
+        uint8_t ret;
+        uint8_t bank[2] = {REG_AS7341_CFG_0,0};
+        ret = i2c_write_read_dt(&dev_i2c,&bank[0],1,&bank[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,bank[0]);
+        }
+        if(temp == 1){
+        
+                bank[1] = bank[1] | (1<<4);
+        }
+        
+        if(temp == 0){
+        
+                bank[1] = bank[1] & (~(1<<4));
+        }
+        i2c_write_dt(&dev_i2c,bank,sizeof(bank));
 }
 
 void config(eMode_t mode)
 {
-	setBank(1);
-	uint8_t ret;
-	uint8_t config[2] = {CONFIG,0};
-	ret = i2c_write_read_dt(&dev_i2c,&config[0],1,&config[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,config[0]);
-	}
-	//switch(mode){
-	//	case eSpm : {
-	config[1] = (config[1] & (~3)) | eSpm;
-	//	};
-	//	break;
-	//	case eSyns : {
-	//	data = (data & (~3)) | eSyns;
-	//	};
-	//	break;
-	//	case eSynd : {
-	//	data = (data & (~3)) | eSynd;
-	//	};
-	//	break;
-	//	default : break;
-	//}
-	i2c_write_dt(&dev_i2c,config,sizeof(config));
-	setBank(0);
+        setBank(1);
+        uint8_t ret;
+        uint8_t config[2] = {CONFIG,0};
+        ret = i2c_write_read_dt(&dev_i2c,&config[0],1,&config[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,config[0]);
+        }
+        //switch(mode){
+        //	case eSpm : {
+        config[1] = (config[1] & (~3)) | eSpm;
+        //	};
+        //	break;
+        //	case eSyns : {
+        //	data = (data & (~3)) | eSyns;
+        //	};
+        //	break;
+        //	case eSynd : {
+        //	data = (data & (~3)) | eSynd;
+        //	};
+        //	break;
+        //	default : break;
+        //}
+        i2c_write_dt(&dev_i2c,config,sizeof(config));
+        setBank(0);
 }
 
 bool measureComplete(){
-	uint8_t data = 0;
-	uint8_t ret;
-	ret = i2c_reg_read_byte_dt(&dev_i2c, AS7341_STATUS2, &data);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,AS7341_STATUS2);
-	}
-	if((data & (1<<6))){
-		return true;
-	}
-	else{
-		return false;
-	}
+        uint8_t data = 0;
+        uint8_t ret;
+        ret = i2c_reg_read_byte_dt(&dev_i2c, AS7341_STATUS2, &data);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,AS7341_STATUS2);
+        }
+        if((data & (1<<6))){
+                return true;
+        }
+        else{
+                return false;
+        }
 }
 
 void startMeasure()
 {
-	uint8_t ret;
-	uint8_t meas[2] = {REG_AS7341_CFG_0,0};
-	ret = i2c_write_read_dt(&dev_i2c,&meas[0],1,&meas[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,meas[0]);
-	}
-	meas[1] = meas[1] & (~(1<<4));
-	i2c_write_dt(&dev_i2c,meas,sizeof(meas));
-	enableSpectralMeasure(false);
-	i2c_reg_write_byte_dt(&dev_i2c, AS7341_CFG6, 0x10);
-  	//Set up ADC channel to filter
-	i2c_reg_write_byte_dt(&dev_i2c, f4_left, 0x42);	//F4 register to ADC3
-	i2c_reg_write_byte_dt(&dev_i2c, f4_right, 0x04);
-	i2c_reg_write_byte_dt(&dev_i2c, f7_left, 0x13);	//F6 register to ADC2
-	i2c_reg_write_byte_dt(&dev_i2c, f7_right, 0x13);
-  	enableSMUX(true);
-	config(eSpm);
-  	enableSpectralMeasure(true);
-  	while(!measureComplete()){
-    	k_sleep(K_MSEC(1));	//usec to wait
-  		}
+        uint8_t ret;
+        uint8_t meas[2] = {REG_AS7341_CFG_0,0};
+        ret = i2c_write_read_dt(&dev_i2c,&meas[0],1,&meas[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,meas[0]);
+        }
+        meas[1] = meas[1] & (~(1<<4));
+        i2c_write_dt(&dev_i2c,meas,sizeof(meas));
+        enableSpectralMeasure(false);
+        i2c_reg_write_byte_dt(&dev_i2c, AS7341_CFG6, 0x10);
+        //Set up ADC channel to filter
+        i2c_reg_write_byte_dt(&dev_i2c, f4_left, 0x42);	//F4 register to ADC3
+        i2c_reg_write_byte_dt(&dev_i2c, f4_right, 0x04);
+        i2c_reg_write_byte_dt(&dev_i2c, f7_left, 0x13);	//F6 register to ADC2
+        i2c_reg_write_byte_dt(&dev_i2c, f7_right, 0x13);
+        enableSMUX(true);
+        config(eSpm);
+        enableSpectralMeasure(true);
+        while(!measureComplete()){
+        k_sleep(K_MSEC(1));	//usec to wait
+                }
 }
 
 
 uint16_t getChannelData(uint8_t low_channel, uint8_t high_channel){
-	uint8_t data[2]={0};
-	uint16_t channelData = 0x0000;
-	uint8_t ret;
-	//ret = i2c_burst_read_dt(&dev_i2c,low_channel, data, sizeof(data));
-	ret = i2c_reg_read_byte_dt(&dev_i2c,low_channel,&data[0]); //alter to burst read to ensure propper reading
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,low_channel);
-	}
-	ret = i2c_reg_read_byte_dt(&dev_i2c,high_channel,&data[1]);
-	//if(ret != 0){
-	//	printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,high_channel);
-	//}
-	channelData = data[1];
-	channelData = (channelData<<8) | data[0];
-	k_sleep(K_MSEC(50));	//usec to wait
-	return channelData;
+        uint8_t data[2]={0};
+        uint16_t channelData = 0x0000;
+        uint8_t ret;
+        //ret = i2c_burst_read_dt(&dev_i2c,low_channel, data, sizeof(data));
+        ret = i2c_reg_read_byte_dt(&dev_i2c,low_channel,&data[0]); //alter to burst read to ensure propper reading
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,low_channel);
+        }
+        ret = i2c_reg_read_byte_dt(&dev_i2c,high_channel,&data[1]);
+        //if(ret != 0){
+        //	printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,high_channel);
+        //}
+        channelData = data[1];
+        channelData = (channelData<<8) | data[0];
+        k_sleep(K_MSEC(50));	//usec to wait
+        return channelData;
 }
 
 void setAtime(uint8_t value)
 {
-	uint8_t atime[2] = {ATIME, value};
-	i2c_write_dt(&dev_i2c,atime,sizeof(atime));
+        uint8_t atime[2] = {ATIME, value};
+        i2c_write_dt(&dev_i2c,atime,sizeof(atime));
 }
 
 void setAGAIN(uint8_t value)
 {
-	if(value > 10) value = 10;
-	uint8_t again[2] = {REG_AS7341_CFG_1, value};
-	i2c_write_dt(&dev_i2c,again,sizeof(again));
+        if(value > 10) value = 10;
+        uint8_t again[2] = {REG_AS7341_CFG_1, value};
+        i2c_write_dt(&dev_i2c,again,sizeof(again));
 }
 
 void setAstep(uint16_t value){
-	uint8_t step_l[2] = {ASTEP_L, 0};
-	uint8_t step_h[2] = {ASTEP_H, 0};
-	uint8_t ret;
-	step_l[1] = value & 0x00ff;
-	step_h[1] = value >> 8 ;
-	
-	ret = i2c_write_dt(&dev_i2c,step_l,sizeof(step_l));
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,step_l[1]);
-	}
-	i2c_write_dt(&dev_i2c,step_h,sizeof(step_h));
+        uint8_t step_l[2] = {ASTEP_L, 0};
+        uint8_t step_h[2] = {ASTEP_H, 0};
+        uint8_t ret;
+        step_l[1] = value & 0x00ff;
+        step_h[1] = value >> 8 ;
+        
+        ret = i2c_write_dt(&dev_i2c,step_l,sizeof(step_l));
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,step_l[1]);
+        }
+        i2c_write_dt(&dev_i2c,step_h,sizeof(step_h));
 }
 /*
 void enableSpectralInterrupt(bool on){
-	uint8_t ret;
-	uint8_t enspec[2] = {REG_AS7341_INTENAB, 0};
-	ret = i2c_write_read_dt(&dev_i2c,&enspec[0],1,&enspec[1],1);
-	if(ret != 0){
-		printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,enspec[0]);
-	}
-	if(on == true){
-    	enspec[1] = enspec[1] | (1<<3);
-	
-	i2c_write_dt(&dev_i2c,enspec,sizeof(enspec));
-  	}
-	else{
-		enspec[1] = enspec[1] & (~(1<<3));
-		i2c_write_dt(&dev_i2c,enspec,sizeof(enspec));
-	}
-  
+        uint8_t ret;
+        uint8_t enspec[2] = {REG_AS7341_INTENAB, 0};
+        ret = i2c_write_read_dt(&dev_i2c,&enspec[0],1,&enspec[1],1);
+        if(ret != 0){
+                printk("Failed to write/read I2C device address %x at Reg. %x \r\n", dev_i2c.addr,enspec[0]);
+        }
+        if(on == true){
+        enspec[1] = enspec[1] | (1<<3);
+        
+        i2c_write_dt(&dev_i2c,enspec,sizeof(enspec));
+        }
+        else{
+                enspec[1] = enspec[1] & (~(1<<3));
+                i2c_write_dt(&dev_i2c,enspec,sizeof(enspec));
+        }
+
 }
 */
 static void bt_ready(int err)
 {
-	char addr_s[BT_ADDR_LE_STR_LEN];
-	bt_addr_le_t addr = {0};
-	size_t count = 1;
+        char addr_s[BT_ADDR_LE_STR_LEN];
+        bt_addr_le_t addr = {0};
+        size_t count = 1;
 
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-		return;
-	}
+        if (err) {
+                printk("Bluetooth init failed (err %d)\n", err);
+                return;
+        }
 
-	printk("Bluetooth initialized\n");
+        printk("Bluetooth initialized\n");
 
-	/* Start advertising */
-	err = bt_le_adv_start(BT_LE_ADV_NCONN_IDENTITY, ad, ARRAY_SIZE(ad),
-			      sd, ARRAY_SIZE(sd));
-	if (err) {
-		printk("Advertising failed to start (err %d)\n", err);
-		return;
-	}
+        /* Start advertising */
+        err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+        if (err) {
+                printk("Advertising failed to start (err %d)\n", err);
+                return;
+        }
 
 
-	/* For connectable advertising you would use
-	 * bt_le_oob_get_local().  For non-connectable non-identity
-	 * advertising an non-resolvable private address is used;
-	 * there is no API to retrieve that.
-	 */
+        /* For connectable advertising you would use
+        * bt_le_oob_get_local().  For non-connectable non-identity
+        * advertising an non-resolvable private address is used;
+        * there is no API to retrieve that.
+        */
 
-	bt_id_get(&addr, &count);
-	bt_addr_le_to_str(&addr, addr_s, sizeof(addr_s));
+        bt_id_get(&addr, &count);
+        bt_addr_le_to_str(&addr, addr_s, sizeof(addr_s));
 
-	printk("Beacon started, advertising as %s\n", addr_s);
+        printk("Beacon started, advertising as %s\n", addr_s);
 }
 
 int main(void)
 {
-	int err;
-	int AF;
-	int PPIX;
-	int i=0;
-	int CH0, CH1, CH2, CH3, CH4, CH5;
+        int err;
+        int AF;
+        int PPIX;
+        int i=0;
+        int CH0, CH1, CH4, CH5;
 
-	//Retrive API-specvific device structure and ensure ready to use
-	//Need to run through and esnure all functions required are present
-	//static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
-	if (!device_is_ready(dev_i2c.bus)) {
-		printk("I2C bus %s is not ready!\n\r",dev_i2c.bus->name);
-		return -1;
-	}
-	enableAS7341(true);
-	setAGAIN(10); // sets gain to 512x
-	setAstep(84);
-	setAtime(84);
+        //Retrive API-specvific device structure and ensure ready to use
+        //Need to run through and esnure all functions required are present
+        //static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
+        if (!device_is_ready(dev_i2c.bus)) {
+                printk("I2C bus %s is not ready!\n\r",dev_i2c.bus->name);
+                return -1;
+        }
+        enableAS7341(true);
+        setAGAIN(10); // sets gain to 512x
+        setAstep(84);
+        setAtime(84);
 
-	printk("Starting Beacon\n");
-	/* Initialize the Bluetooth Subsystem */
-	err = bt_enable(bt_ready);
-	if (err) {
-		printk("Bluetooth init failed (err %d)\n", err);
-	}
-	startMeasure();
-	for(i=0; i<10; i++){
-		
-		//read data from f4 (ch3)
-		//AF = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
-		//printf("Value from f4: %d\n", AF);
-		CH0 = getChannelData(AS7341_CH0_DATA_L, AS7341_CH0_DATA_H);
-		CH1 = getChannelData(AS7341_CH1_DATA_L, AS7341_CH1_DATA_H);
-		PPIX = getChannelData(AS7341_CH2_DATA_L, AS7341_CH2_DATA_H);
-		AF = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
-		CH4 = getChannelData(AS7341_CH4_DATA_L, AS7341_CH4_DATA_H);
-		CH5 = getChannelData(AS7341_CH5_DATA_L, AS7341_CH5_DATA_H);
-		printk("F4 Reading: %d\nF7 Reading: %d\n", AF, PPIX);
-		/*Update the advertising data dynamically */
-		adv_mfg_data.F4_reading = AF;
-		adv_mfg_data.F7_reading = PPIX;
-		bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-	}
+        printk("Starting Beacon\n");
+        /* Initialize the Bluetooth Subsystem */
+        err = bt_enable(bt_ready);
+        if (err) {
+                printk("Bluetooth init failed (err %d)\n", err);
+        }
 
-	return 0;
+        startMeasure();
+        for(i=0; i<100; i++){
+                
+                //read data from f4 (ch3)
+                //AF = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
+                //printf("Value from f4: %d\n", AF);
+                CH0 = getChannelData(AS7341_CH0_DATA_L, AS7341_CH0_DATA_H);
+                CH1 = getChannelData(AS7341_CH1_DATA_L, AS7341_CH1_DATA_H);
+                PPIX = getChannelData(AS7341_CH2_DATA_L, AS7341_CH2_DATA_H);
+                AF = getChannelData(AS7341_CH3_DATA_L, AS7341_CH3_DATA_H);
+                CH4 = getChannelData(AS7341_CH4_DATA_L, AS7341_CH4_DATA_H);
+                CH5 = getChannelData(AS7341_CH5_DATA_L, AS7341_CH5_DATA_H);
+                printk("F4 Reading: %d\nF7 Reading: %d\n", AF, PPIX);
+                /*Update the advertising data dynamically */
+                adv_mfg_data.F4_reading = AF;
+                //adv_mfg_data.F7_reading = PPIX;
+                bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+
+                k_usleep(5000);
+        }
+
+return 0;
 }
